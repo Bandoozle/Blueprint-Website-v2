@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useLayoutEffect, useCallback } from "react";
 import CalloutCard from "../components/shared/CalloutCard";
 import Button from "../components/shared/Button";
 import OpenRoleCard from "../components/shared/OpenRoleCard";
@@ -418,32 +418,38 @@ const StudentsPage = () => {
   );
 };
 
+/** Match NavigationTabs-style bar: a few px past label each side (not a fixed 160px width). */
+const APPLICATION_TAB_UNDERLINE_EXTRA_PX = 8;
+
 function ApplicationProcessSection() {
   const [activeTab, setActiveTab] = useState<string>("MEET BLUEPRINT");
   const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
-  const [indicatorStyle, setIndicatorStyle] = useState({ left: 0, width: 160 });
+  const indicatorContainerRef = useRef<HTMLDivElement | null>(null);
+  const tabsScrollRef = useRef<HTMLDivElement | null>(null);
+  const [indicatorStyle, setIndicatorStyle] = useState({ left: 0, width: 0 });
 
   const updateIndicator = useCallback(() => {
     const activeIndex = APPLICATION_TABS.indexOf(activeTab as typeof APPLICATION_TABS[number]);
     const tabEl = tabRefs.current[activeIndex];
-    if (tabEl) {
-      const parent = tabEl.parentElement;
-      if (parent) {
-        const parentRect = parent.getBoundingClientRect();
-        const tabRect = tabEl.getBoundingClientRect();
-        const tabCenter = tabRect.left - parentRect.left + tabRect.width / 2;
-        setIndicatorStyle({
-          left: tabCenter - 80,
-          width: 160,
-        });
-      }
-    }
+    const container = indicatorContainerRef.current;
+    if (!tabEl || !container) return;
+    const containerRect = container.getBoundingClientRect();
+    const tabRect = tabEl.getBoundingClientRect();
+    setIndicatorStyle({
+      left: tabRect.left - containerRect.left - APPLICATION_TAB_UNDERLINE_EXTRA_PX,
+      width: tabRect.width + APPLICATION_TAB_UNDERLINE_EXTRA_PX * 2,
+    });
   }, [activeTab]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     updateIndicator();
     window.addEventListener("resize", updateIndicator);
-    return () => window.removeEventListener("resize", updateIndicator);
+    const scrollEl = tabsScrollRef.current;
+    scrollEl?.addEventListener("scroll", updateIndicator, { passive: true });
+    return () => {
+      window.removeEventListener("resize", updateIndicator);
+      scrollEl?.removeEventListener("scroll", updateIndicator);
+    };
   }, [updateIndicator]);
 
   const renderTabContent = () => {
@@ -494,7 +500,10 @@ function ApplicationProcessSection() {
       <div className="flex flex-col gap-[21px]">
         {/* Tab bar */}
         <div className="flex flex-col gap-[8px]">
-          <div className="flex gap-[60px] max-md:gap-[24px] pl-[16px] overflow-x-auto">
+          <div
+            ref={tabsScrollRef}
+            className="flex gap-[60px] max-md:gap-[24px] pl-[16px] overflow-x-auto"
+          >
             {APPLICATION_TABS.map((tab, i) => (
               <button
                 key={tab}
@@ -510,14 +519,14 @@ function ApplicationProcessSection() {
               </button>
             ))}
           </div>
-          {/* Tab indicator line */}
-          <div className="relative w-full">
+          {/* Tab indicator line — position/size from active button rect (same edge as this container) */}
+          <div ref={indicatorContainerRef} className="relative w-full">
             <div
               className="absolute top-0 h-[5px] bg-[#0146be] rounded-t-[10px]"
               style={{
                 left: indicatorStyle.left,
                 width: indicatorStyle.width,
-                transition: "left 0.2s ease",
+                transition: "left 0.2s ease, width 0.2s ease",
               }}
             />
             <div className="w-full h-px bg-[#aaaaaa] mt-[5px]" />
